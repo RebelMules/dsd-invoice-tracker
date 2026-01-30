@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import BarcodeScanner from '@/components/BarcodeScanner';
 import InvoiceCapture from '@/components/InvoiceCapture';
+import LineItemReview, { LineItem } from '@/components/LineItemReview';
 
 interface ScannedItem {
   barcode: string;
@@ -33,7 +34,7 @@ interface CapturedInvoice {
   isProcessing: boolean;
 }
 
-type ReceivingStep = 'scanning' | 'capture' | 'review' | 'submitted';
+type ReceivingStep = 'scanning' | 'capture' | 'lineItems' | 'review' | 'submitted';
 
 export default function ReceivingPage() {
   const [step, setStep] = useState<ReceivingStep>('scanning');
@@ -41,8 +42,11 @@ export default function ReceivingPage() {
   const [scannedItems, setScannedItems] = useState<ScannedItem[]>([]);
   const [selectedVendor, setSelectedVendor] = useState<string>('');
   const [capturedInvoice, setCapturedInvoice] = useState<CapturedInvoice | null>(null);
+  const [extractedLineItems, setExtractedLineItems] = useState<LineItem[]>([]);
   const [notes, setNotes] = useState('');
   const [showCapture, setShowCapture] = useState(false);
+  const [isProcessingInvoice, setIsProcessingInvoice] = useState(false);
+  const [processingStatus, setProcessingStatus] = useState('');
 
   const handleScan = async (barcode: string, format: string) => {
     // Play success sound
@@ -84,10 +88,70 @@ export default function ReceivingPage() {
       preview,
       isProcessing: true,
     });
-    setStep('review');
+    setIsProcessingInvoice(true);
+    setProcessingStatus('Uploading invoice...');
 
-    // TODO: Send to Azure Form Recognizer
-    // For now, simulate processing
+    try {
+      // Send to OCR API
+      const formData = new FormData();
+      formData.append('invoice', blob, 'invoice.jpg');
+      
+      setProcessingStatus('Reading invoice (OCR)...');
+      
+      const response = await fetch('/api/process-invoice', {
+        method: 'POST',
+        body: formData,
+      });
+      
+      const data = await response.json();
+      
+      if (data.parsed?.lineItems) {
+        setProcessingStatus('Extracting line items...');
+        // Map to LineItem format
+        const items: LineItem[] = data.parsed.lineItems.map((item: any) => ({
+          upc: item.upc || '',
+          description: item.description || '',
+          cases: item.cases || 0,
+          units: item.units || 0,
+          unitCost: item.unitCost || (item.totalAmount && item.units ? item.totalAmount / item.units : 0),
+          totalAmount: item.totalAmount || 0,
+        }));
+        setExtractedLineItems(items);
+        setCapturedInvoice(prev => prev ? {
+          ...prev,
+          isProcessing: false,
+          extractedData: {
+            vendor: data.parsed.vendor,
+            invoiceNumber: data.parsed.invoiceNumber,
+            date: data.parsed.invoiceDate,
+            total: data.parsed.total,
+          }
+        } : null);
+        setStep('lineItems');
+      } else {
+        // OCR worked but no parsed data - go to manual review
+        setCapturedInvoice(prev => prev ? { ...prev, isProcessing: false } : null);
+        setStep('review');
+      }
+    } catch (error) {
+      console.error('Invoice processing error:', error);
+      setCapturedInvoice(prev => prev ? { ...prev, isProcessing: false } : null);
+      setStep('review');
+    } finally {
+      setIsProcessingInvoice(false);
+      setProcessingStatus('');
+    }
+  };
+  
+  // Keep old setTimeout code as fallback
+  const handleInvoiceCaptureFallback = async (blob: Blob, preview: string) => {
+    setShowCapture(false);
+    setCapturedInvoice({
+      blob,
+      preview,
+      isProcessing: true,
+    });
+    setStep('review');
     setTimeout(() => {
       setCapturedInvoice(prev => prev ? {
         ...prev,
@@ -161,6 +225,41 @@ export default function ReceivingPage() {
             Start New Receiving
           </button>
         </div>
+      </div>
+    );
+  }
+
+  // Line items review step
+  if (step === 'lineItems') {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <header className="bg-white shadow-sm border-b sticky top-0 z-10">
+          <div className="max-w-4xl mx-auto px-4 py-4">
+            <h1 className="text-xl font-bold text-gray-900">Review Line Items</h1>
+            <p className="text-sm text-gray-500">
+              {capturedInvoice?.extractedData?.vendor} • Invoice #{capturedInvoice?.extractedData?.invoiceNumber}
+            </p>
+          </div>
+        </header>
+
+        <main className="max-w-4xl mx-auto px-4 py-6">
+          {/* Processing indicator */}
+          {isProcessingInvoice && (
+            <div className="mb-4 bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-center gap-3">
+              <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+              <span className="text-blue-700">{processingStatus}</span>
+            </div>
+          )}
+
+          <LineItemReview
+            items={extractedLineItems}
+            onSave={(items) => {
+              setExtractedLineItems(items);
+              setStep('review');
+            }}
+            onCancel={() => setStep('scanning')}
+          />
+        </main>
       </div>
     );
   }
