@@ -1,111 +1,93 @@
 # DSD Invoice Tracker
 
-Cloud-based invoice tracking system for Direct Store Delivery vendors.
+A Next.js application for Direct Store Delivery (DSD) invoice tracking and receiving verification at grocery stores.
 
-## Quick Setup
+## Features
 
-### 1. Create Postgres Database
-Go to: https://vercel.com/rebelmules/dsd-invoice-tracker/stores
+- **📦 Receiving Workflow** - Two modes: Invoice-First (recommended) or Scan-First
+- **📷 Invoice Capture** - Camera-based invoice photo capture
+- **📱 Barcode Scanning** - UPC scanning with native BarcodeDetector API + html5-qrcode fallback
+- **🔍 UPC Lookups** - Auto-match products against internal catalog and AWG database
+- **✅ Verification** - Real-time count verification against invoice line items
+- **📊 Dashboard** - Overview of invoices, pending approvals, and vendor activity
 
-Click **Create Database** → **Postgres** → **Continue**
+## Tech Stack
 
-Name it: `dsd-tracker-db`
+- **Framework**: Next.js 14 (App Router)
+- **Database**: Neon Postgres (serverless)
+- **OCR**: Azure Form Recognizer
+- **AI Parsing**: Claude (Anthropic) for invoice data extraction
+- **Styling**: Tailwind CSS
+- **Deployment**: Vercel
 
-### 2. Run Schema Migration
-After database is created, the connection string will be in environment variables.
-
-```bash
-cd ~/clawd/projects/dsd-tracker
-npm install
-npm run db:migrate
-```
-
-### 3. Deploy
-```bash
-vercel --prod
-```
-
-## Architecture
+## Database Schema
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    DSD INVOICE TRACKER                       │
-├─────────────────────────────────────────────────────────────┤
-│                                                              │
-│  Invoice Scans (PDF)                                         │
-│       │                                                      │
-│       ▼                                                      │
-│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐      │
-│  │ Vercel Blob │───▶│ ClawdBot    │───▶│ Vercel      │      │
-│  │ (Storage)   │    │ (OCR/Parse) │    │ Postgres    │      │
-│  └─────────────┘    └─────────────┘    └─────────────┘      │
-│                                              │               │
-│                                              ▼               │
-│                                    ┌─────────────────┐      │
-│                                    │ Dashboard/API   │      │
-│                                    │ - Cost Trends   │      │
-│                                    │ - Price Alerts  │      │
-│                                    │ - Vendor Cards  │      │
-│                                    └─────────────────┘      │
-│                                                              │
-└─────────────────────────────────────────────────────────────┘
+vendors          - DSD vendor master data
+products         - Product catalog with UPCs
+invoices         - Invoice headers
+invoice_lines    - Invoice line items
+awg_catalog      - AWG wholesale product database
 ```
 
-## Database Tables
+## API Routes
 
-| Table | Purpose |
-|-------|---------|
-| vendors | DSD vendor master (Coke, Pepsi, Frito, etc.) |
-| products | UPC/item master with current costs (internal catalog) |
-| awg_catalog | AWG wholesale master database for UPC → Vendor lookup |
-| invoices | Invoice headers with totals |
-| invoice_lines | Line item detail |
-| promotions | Promo/allowance tracking |
-| price_history | Cost changes over time |
-| scan_log | Processing status for scanned files |
-
-## Product Catalog Architecture
-
-```
-UPC Scan → Lookup Hierarchy:
-┌─────────────────────────────────────────────────────────────┐
-│  1. Internal Products Table (our verified data)            │
-│     └─ Source: manual entry, invoice imports               │
-├─────────────────────────────────────────────────────────────┤
-│  2. AWG Catalog (wholesale master database)                │
-│     └─ Source: AWG data export, bulk import                │
-├─────────────────────────────────────────────────────────────┤
-│  3. Unknown → Manual entry (optionally save for future)    │
-└─────────────────────────────────────────────────────────────┘
-```
-
-**UPC Lookup**: `GET /api/lookup/upc?upc=012345678901`
-- Returns product info + suggested vendor
-- Confidence: high (verified) / medium / low
-
-**Catalog Import**: `POST /api/catalog/import`
-- Bulk import from AWG or internal catalog
-- Auto-matches AWG vendor names to our vendors
-
-## API Endpoints
-
-```
-POST /api/invoices/upload    - Upload scanned invoice
-GET  /api/invoices           - List invoices
-GET  /api/products           - Product master
-GET  /api/vendors            - Vendor list
-GET  /api/reports/costs      - Cost trend report
-GET  /api/reports/prices     - Price change alerts
-```
+| Route | Method | Description |
+|-------|--------|-------------|
+| `/api/health` | GET | System health check |
+| `/api/stats` | GET | Dashboard statistics |
+| `/api/lookup/upc` | GET | UPC product lookup |
+| `/api/lookup/upc` | POST | Add product to catalog |
+| `/api/process-invoice` | POST | OCR + parse invoice image |
+| `/api/receiving/submit` | POST | Save receiving session |
 
 ## Environment Variables
 
-After creating Postgres, these will be auto-populated:
-- `POSTGRES_URL`
-- `POSTGRES_PRISMA_URL`
-- `POSTGRES_URL_NON_POOLING`
-- `POSTGRES_USER`
-- `POSTGRES_HOST`
-- `POSTGRES_PASSWORD`
-- `POSTGRES_DATABASE`
-- `BLOB_READ_WRITE_TOKEN` (for scan storage)
+```bash
+# Neon Postgres
+DATABASE_URL=postgresql://...
+POSTGRES_URL=postgresql://...
+
+# Azure Form Recognizer
+AZURE_FORM_RECOGNIZER_ENDPOINT=https://...
+AZURE_FORM_RECOGNIZER_KEY=...
+
+# Optional: Anthropic for Claude parsing
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+## Getting Started
+
+```bash
+# Install dependencies
+npm install
+
+# Run development server
+npm run dev
+
+# Build for production
+npm run build
+```
+
+## Receiving Workflow
+
+### Invoice-First Mode (Recommended)
+1. Capture invoice photo with camera
+2. Azure OCR extracts text
+3. Claude parses line items
+4. Scan products to verify quantities
+5. Submit with discrepancy flagging
+
+### Scan-First Mode
+1. Select vendor
+2. Scan products as they arrive
+3. Capture invoice after
+4. Submit receiving record
+
+## Deployment
+
+Configured for Vercel deployment with Neon database.
+
+## License
+
+Private - Grocery Basket
