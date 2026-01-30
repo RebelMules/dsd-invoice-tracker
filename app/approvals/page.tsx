@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import LineItemReview, { LineItem } from '@/components/LineItemReview';
 
 interface PendingApproval {
   id: string;
@@ -14,43 +15,60 @@ interface PendingApproval {
   invoicePreview: string;
   notes?: string;
   status: 'pending' | 'approved' | 'rejected';
+  lineItems: LineItem[];
 }
 
 // Mock data - would come from database
 const mockApprovals: PendingApproval[] = [
   {
     id: '1',
-    vendor: 'Mitchell Distributing',
-    invoiceNumber: 'MD-2026-0129-A',
+    vendor: 'Clark Beverage (Pepsi)',
+    invoiceNumber: '42682504',
     submittedBy: 'Store #42',
-    submittedAt: new Date(Date.now() - 1000 * 60 * 15), // 15 min ago
-    itemCount: 24,
-    invoiceTotal: 1847.50,
+    submittedAt: new Date(Date.now() - 1000 * 60 * 15),
+    itemCount: 10,
+    invoiceTotal: 2348.80,
     invoicePreview: '/placeholder-invoice.jpg',
     status: 'pending',
+    lineItems: [
+      { upc: '012000171864', description: 'DT PEPSI ORIG 12OZ', cases: 4, units: 8, unitCost: 5.90, totalAmount: 47.20 },
+      { upc: '012000240775', description: 'MDEW BJA CABO CIT', cases: 15, units: 30, unitCost: 5.90, totalAmount: 177.00 },
+      { upc: '052000129342', description: 'GAT LL 12OZ', cases: 2, units: 8, unitCost: 3.40, totalAmount: 27.20 },
+      { upc: '052000129359', description: 'GAT ORG 12OZ', cases: 2, units: 8, unitCost: 3.40, totalAmount: 27.20 },
+      { upc: '012000014208', description: 'AQUA WTR 12OZ', cases: 3, units: 9, unitCost: 3.23, totalAmount: 29.10 },
+    ],
   },
   {
     id: '2',
     vendor: 'Prairie Farms Dairy',
     invoiceNumber: 'PF-78234',
     submittedBy: 'Store #42',
-    submittedAt: new Date(Date.now() - 1000 * 60 * 45), // 45 min ago
+    submittedAt: new Date(Date.now() - 1000 * 60 * 45),
     itemCount: 18,
     invoiceTotal: 634.20,
     invoicePreview: '/placeholder-invoice.jpg',
     notes: 'Short 2 cases of 2% milk',
     status: 'pending',
+    lineItems: [
+      { upc: '071818001014', description: '2% MILK GAL', cases: 10, units: 40, unitCost: 3.25, totalAmount: 130.00 },
+      { upc: '071818001021', description: 'WHOLE MILK GAL', cases: 8, units: 32, unitCost: 3.45, totalAmount: 110.40 },
+      { upc: '071818002011', description: 'HALF & HALF QT', cases: 5, units: 20, unitCost: 2.15, totalAmount: 43.00 },
+    ],
   },
   {
     id: '3',
     vendor: 'Lipari Foods',
     invoiceNumber: 'LF-112847',
     submittedBy: 'Store #41',
-    submittedAt: new Date(Date.now() - 1000 * 60 * 120), // 2 hours ago
+    submittedAt: new Date(Date.now() - 1000 * 60 * 120),
     itemCount: 42,
     invoiceTotal: 2156.80,
     invoicePreview: '/placeholder-invoice.jpg',
     status: 'pending',
+    lineItems: [
+      { upc: '041303054000', description: 'BOARS HEAD HAM', cases: 2, units: 10, unitCost: 8.50, totalAmount: 85.00 },
+      { upc: '041303054017', description: 'BOARS HEAD TURKEY', cases: 2, units: 10, unitCost: 9.25, totalAmount: 92.50 },
+    ],
   },
 ];
 
@@ -147,15 +165,47 @@ export default function ApprovalsPage() {
             )}
           </div>
 
-          {/* OCR extracted line items would go here */}
-          <div className="bg-white rounded-xl shadow-sm border">
-            <div className="p-4 border-b bg-gray-50">
-              <h2 className="font-semibold">Extracted Line Items</h2>
+          {/* Line Items Review */}
+          {selectedApproval.status === 'pending' ? (
+            <LineItemReview
+              items={selectedApproval.lineItems}
+              onSave={(updatedItems) => {
+                // Update the approval with edited line items
+                setApprovals(prev => prev.map(a => 
+                  a.id === selectedApproval.id 
+                    ? { ...a, lineItems: updatedItems, itemCount: updatedItems.length, invoiceTotal: updatedItems.reduce((sum, item) => sum + item.totalAmount, 0) }
+                    : a
+                ));
+                setSelectedApproval(prev => prev ? {
+                  ...prev,
+                  lineItems: updatedItems,
+                  itemCount: updatedItems.length,
+                  invoiceTotal: updatedItems.reduce((sum, item) => sum + item.totalAmount, 0),
+                } : null);
+              }}
+              onCancel={() => setSelectedApproval(null)}
+            />
+          ) : (
+            <div className="bg-white rounded-xl shadow-sm border">
+              <div className="p-4 border-b bg-gray-50">
+                <h2 className="font-semibold">Line Items ({selectedApproval.lineItems.length})</h2>
+              </div>
+              <div className="divide-y">
+                {selectedApproval.lineItems.map((item, idx) => (
+                  <div key={idx} className="p-3 flex items-center gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-sm">{item.description}</div>
+                      <div className="text-xs text-gray-500 font-mono">{item.upc}</div>
+                    </div>
+                    <div className="text-right text-sm">
+                      <div className="text-gray-500">{item.cases}cs / {item.units}u</div>
+                      <div className="font-medium">${item.totalAmount.toFixed(2)}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-            <div className="p-4 text-center text-gray-500">
-              OCR-extracted line items would display here
-            </div>
-          </div>
+          )}
 
           {/* Action buttons */}
           {selectedApproval.status === 'pending' && (
