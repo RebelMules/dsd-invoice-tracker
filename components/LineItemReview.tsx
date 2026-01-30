@@ -6,9 +6,12 @@ export interface LineItem {
   upc: string;
   description: string;
   cases: number;
-  units: number;
+  unitsPerCase?: number;  // Units per case (optional)
+  units: number;          // Total units (cases × unitsPerCase)
   unitCost: number;
   totalAmount: number;
+  lastCost?: number;      // Previous cost for comparison
+  costTrend?: 'up' | 'down' | 'same';
 }
 
 interface LineItemReviewProps {
@@ -27,10 +30,17 @@ export default function LineItemReview({ items, onSave, onCancel }: LineItemRevi
       
       const updated = { ...item, [field]: value };
       
-      // Auto-calculate total if cases/units/unitCost change
-      if (field === 'cases' || field === 'units' || field === 'unitCost') {
-        const units = field === 'units' ? Number(value) : updated.units;
-        const unitCost = field === 'unitCost' ? Number(value) : updated.unitCost;
+      // Auto-calculate units when cases or unitsPerCase change
+      if (field === 'cases' || field === 'unitsPerCase') {
+        const cases = field === 'cases' ? Number(value) : updated.cases;
+        const unitsPerCase = field === 'unitsPerCase' ? Number(value) : (updated.unitsPerCase || 1);
+        updated.units = cases * unitsPerCase;
+      }
+      
+      // Auto-calculate total if units or unitCost change
+      if (field === 'cases' || field === 'unitsPerCase' || field === 'unitCost') {
+        const units = updated.units || 0;
+        const unitCost = field === 'unitCost' ? Number(value) : (updated.unitCost || 0);
         if (units && unitCost) {
           updated.totalAmount = Number((units * unitCost).toFixed(2));
         }
@@ -49,6 +59,7 @@ export default function LineItemReview({ items, onSave, onCancel }: LineItemRevi
       upc: '',
       description: 'New Item',
       cases: 0,
+      unitsPerCase: 1,
       units: 0,
       unitCost: 0,
       totalAmount: 0,
@@ -105,8 +116,8 @@ export default function LineItemReview({ items, onSave, onCancel }: LineItemRevi
                     />
                   </div>
                 </div>
-                <div className="flex gap-2">
-                  <div className="w-20">
+                <div className="flex gap-2 flex-wrap">
+                  <div className="w-16">
                     <label className="text-xs text-gray-500">Cases</label>
                     <input
                       type="number"
@@ -115,13 +126,26 @@ export default function LineItemReview({ items, onSave, onCancel }: LineItemRevi
                       className="w-full px-2 py-1 border rounded text-sm text-center"
                     />
                   </div>
+                  <div className="w-12 flex items-end pb-1 text-gray-400">×</div>
+                  <div className="w-16">
+                    <label className="text-xs text-gray-500">Per Case</label>
+                    <input
+                      type="number"
+                      value={item.unitsPerCase || ''}
+                      onChange={(e) => updateItem(idx, 'unitsPerCase', Number(e.target.value))}
+                      className="w-full px-2 py-1 border rounded text-sm text-center"
+                      placeholder="8"
+                    />
+                  </div>
+                  <div className="w-12 flex items-end pb-1 text-gray-400">=</div>
                   <div className="w-20">
-                    <label className="text-xs text-gray-500">Units</label>
+                    <label className="text-xs text-gray-500">Total Units</label>
                     <input
                       type="number"
                       value={item.units || ''}
                       onChange={(e) => updateItem(idx, 'units', Number(e.target.value))}
-                      className="w-full px-2 py-1 border rounded text-sm text-center"
+                      className="w-full px-2 py-1 border rounded text-sm text-center bg-gray-50"
+                      readOnly
                     />
                   </div>
                   <div className="w-24">
@@ -132,19 +156,27 @@ export default function LineItemReview({ items, onSave, onCancel }: LineItemRevi
                       value={item.unitCost || ''}
                       onChange={(e) => updateItem(idx, 'unitCost', Number(e.target.value))}
                       className="w-full px-2 py-1 border rounded text-sm text-right"
+                      placeholder="0.00"
                     />
                   </div>
                   <div className="w-24">
-                    <label className="text-xs text-gray-500">Total</label>
+                    <label className="text-xs text-gray-500">Total $</label>
                     <input
                       type="number"
                       step="0.01"
                       value={item.totalAmount || ''}
                       onChange={(e) => updateItem(idx, 'totalAmount', Number(e.target.value))}
-                      className="w-full px-2 py-1 border rounded text-sm text-right font-medium"
+                      className="w-full px-2 py-1 border rounded text-sm text-right font-medium bg-green-50"
                     />
                   </div>
                 </div>
+                {item.lastCost && (
+                  <div className="text-xs text-gray-500 mt-1">
+                    Last cost: ${item.lastCost.toFixed(2)} 
+                    {item.costTrend === 'up' && <span className="text-red-500 ml-1">↑ Cost increased</span>}
+                    {item.costTrend === 'down' && <span className="text-green-500 ml-1">↓ Cost decreased</span>}
+                  </div>
+                )}
                 <div className="flex justify-between items-center pt-2">
                   <button
                     onClick={(e) => { e.stopPropagation(); deleteItem(idx); }}
@@ -170,9 +202,23 @@ export default function LineItemReview({ items, onSave, onCancel }: LineItemRevi
                   <div className="font-medium text-sm truncate">{item.description || 'No description'}</div>
                   <div className="text-xs text-gray-500 font-mono">{item.upc || 'No UPC'}</div>
                 </div>
+                <div className="text-center text-sm px-2">
+                  <div className="text-gray-900 font-medium">{item.cases} cs</div>
+                  <div className="text-xs text-gray-400">
+                    {item.unitsPerCase ? `×${item.unitsPerCase}` : ''} = {item.units}u
+                  </div>
+                </div>
                 <div className="text-right text-sm">
-                  <div className="text-gray-500">{item.cases}cs / {item.units}u</div>
-                  <div className="font-medium">${item.totalAmount?.toFixed(2) || '0.00'}</div>
+                  <div className="flex items-center justify-end gap-1">
+                    <span className="font-semibold">${item.totalAmount?.toFixed(2) || '0.00'}</span>
+                    {item.costTrend === 'up' && <span className="text-red-500 text-xs">↑</span>}
+                    {item.costTrend === 'down' && <span className="text-green-500 text-xs">↓</span>}
+                  </div>
+                  {item.lastCost && (
+                    <div className="text-xs text-gray-400">
+                      Last: ${item.lastCost.toFixed(2)}
+                    </div>
+                  )}
                 </div>
                 <div className="text-gray-400 text-xs">✎</div>
               </div>
