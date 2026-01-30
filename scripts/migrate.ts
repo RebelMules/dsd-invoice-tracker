@@ -7,7 +7,7 @@ async function migrate() {
 
   try {
     // Read schema file
-    const schemaPath = path.join(__dirname, '../../invoices/schema/dsd_database_schema.sql');
+    const schemaPath = path.join(__dirname, '../../../invoices/schema/dsd_database_schema.sql');
     const schema = fs.readFileSync(schemaPath, 'utf-8');
 
     // Split into individual statements

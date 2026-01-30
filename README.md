@@ -56,12 +56,36 @@ vercel --prod
 | Table | Purpose |
 |-------|---------|
 | vendors | DSD vendor master (Coke, Pepsi, Frito, etc.) |
-| products | UPC/item master with current costs |
+| products | UPC/item master with current costs (internal catalog) |
+| awg_catalog | AWG wholesale master database for UPC → Vendor lookup |
 | invoices | Invoice headers with totals |
 | invoice_lines | Line item detail |
 | promotions | Promo/allowance tracking |
 | price_history | Cost changes over time |
 | scan_log | Processing status for scanned files |
+
+## Product Catalog Architecture
+
+```
+UPC Scan → Lookup Hierarchy:
+┌─────────────────────────────────────────────────────────────┐
+│  1. Internal Products Table (our verified data)            │
+│     └─ Source: manual entry, invoice imports               │
+├─────────────────────────────────────────────────────────────┤
+│  2. AWG Catalog (wholesale master database)                │
+│     └─ Source: AWG data export, bulk import                │
+├─────────────────────────────────────────────────────────────┤
+│  3. Unknown → Manual entry (optionally save for future)    │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**UPC Lookup**: `GET /api/lookup/upc?upc=012345678901`
+- Returns product info + suggested vendor
+- Confidence: high (verified) / medium / low
+
+**Catalog Import**: `POST /api/catalog/import`
+- Bulk import from AWG or internal catalog
+- Auto-matches AWG vendor names to our vendors
 
 ## API Endpoints
 
