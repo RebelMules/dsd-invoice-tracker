@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { sql } from '@vercel/postgres';
+import { query, queryOne } from '@/lib/db';
 
 /**
  * UPC Lookup API - Auto-suggest vendor from product catalogs
@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
 
   try {
     // Priority 1: Check internal products table first (verified data)
-    const internalResult = await sql`
+    const internalProduct = await queryOne(`
       SELECT 
         p.product_id,
         p.upc,
@@ -43,23 +43,21 @@ export async function GET(request: NextRequest) {
         1 AS priority
       FROM products p
       JOIN vendors v ON p.vendor_id = v.vendor_id
-      WHERE p.upc = ${upc} 
-         OR p.upc = ${normalizedUpc}
-         OR p.upc = ${paddedUpc}
+      WHERE p.upc = $1 OR p.upc = $2 OR p.upc = $3
       LIMIT 1
-    `;
+    `, [upc, normalizedUpc, paddedUpc]);
 
-    if (internalResult.rows.length > 0) {
+    if (internalProduct) {
       return NextResponse.json({
         found: true,
         source: 'internal',
-        product: internalResult.rows[0],
-        confidence: internalResult.rows[0].verified ? 'high' : 'medium'
+        product: internalProduct,
+        confidence: internalProduct.verified ? 'high' : 'medium'
       });
     }
 
     // Priority 2: Check AWG catalog
-    const awgResult = await sql`
+    const awgProduct = await queryOne(`
       SELECT 
         a.awg_id,
         a.upc,
@@ -76,20 +74,18 @@ export async function GET(request: NextRequest) {
         2 AS priority
       FROM awg_catalog a
       LEFT JOIN vendors v ON a.vendor_id = v.vendor_id
-      WHERE a.upc = ${upc}
-         OR a.upc = ${normalizedUpc}
-         OR a.upc = ${paddedUpc}
+      WHERE a.upc = $1 OR a.upc = $2 OR a.upc = $3
       ORDER BY a.is_dsd DESC, a.vendor_id IS NOT NULL DESC
       LIMIT 1
-    `;
+    `, [upc, normalizedUpc, paddedUpc]);
 
-    if (awgResult.rows.length > 0) {
+    if (awgProduct) {
       return NextResponse.json({
         found: true,
         source: 'awg',
-        product: awgResult.rows[0],
-        confidence: awgResult.rows[0].vendor_id ? 'medium' : 'low',
-        note: awgResult.rows[0].is_dsd 
+        product: awgProduct,
+        confidence: awgProduct.vendor_id ? 'medium' : 'low',
+        note: awgProduct.is_dsd 
           ? 'Common DSD item' 
           : 'AWG catalog match - verify vendor'
       });
@@ -106,7 +102,7 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     console.error('UPC lookup error:', error);
     return NextResponse.json(
-      { error: 'Lookup failed' },
+      { error: 'Lookup failed', details: String(error) },
       { status: 500 }
     );
   }
@@ -129,9 +125,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Insert or update product
-    const result = await sql`
+    const result = await query(`
       INSERT INTO products (upc, description, vendor_id, pack_size, category, item_code, source)
-      VALUES (${upc}, ${description}, ${vendor_id}, ${pack_size}, ${category}, ${item_code}, 'manual')
+      VALUES ($1, $2, $3, $4, $5, $6, 'manual')
       ON CONFLICT (upc) 
       DO UPDATE SET
         description = COALESCE(EXCLUDED.description, products.description),
@@ -139,11 +135,11 @@ export async function POST(request: NextRequest) {
         pack_size = COALESCE(EXCLUDED.pack_size, products.pack_size),
         updated_at = NOW()
       RETURNING product_id, upc, description
-    `;
+    `, [upc, description, vendor_id, pack_size, category, item_code]);
 
     return NextResponse.json({
       success: true,
-      product: result.rows[0],
+      product: result[0],
       message: 'Product saved to internal catalog'
     });
 

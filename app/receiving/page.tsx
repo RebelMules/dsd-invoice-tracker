@@ -203,7 +203,32 @@ export default function ReceivingPage() {
   };
 
   const handleSubmit = async () => {
-    // TODO: Save to database
+    try {
+      const response = await fetch('/api/receiving/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          vendor: invoice?.vendor || selectedVendor,
+          invoiceNumber: invoice?.invoiceNumber,
+          invoiceDate: invoice?.invoiceDate,
+          invoiceTotal: invoice?.total,
+          lineItems: invoice?.lineItems || [],
+          scannedItems: scannedItems.map(s => ({
+            ...s,
+            timestamp: s.timestamp.toISOString(),
+          })),
+          notes,
+          mode,
+        }),
+      });
+      
+      const data = await response.json();
+      if (!response.ok) {
+        console.error('Submit error:', data);
+      }
+    } catch (error) {
+      console.error('Submit failed:', error);
+    }
     setStep('submitted');
   };
 
