@@ -12,13 +12,23 @@ export default function Layout({ children }: LayoutProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const pathname = usePathname();
 
-  const navItems = [
+  // DSD Management
+  const dsdItems = [
     { href: '/', label: 'Dashboard', icon: '🏠' },
     { href: '/receiving', label: 'Receiving', icon: '📦' },
+    { href: '/dsd/receiving', label: 'DSD Invoices', icon: '🧾' },
+    { href: '/dsd/promos', label: 'Ad Planner', icon: '📣' },
     { href: '/approvals', label: 'Approvals', icon: '✅' },
     { href: '/invoices', label: 'Invoices', icon: '📄' },
     { href: '/vendors', label: 'Vendors', icon: '🏢' },
   ];
+
+  // Operations
+  const opsItems = [
+    { href: '/returned-checks', label: 'Returned Checks', icon: '🔄' },
+  ];
+
+  const navItems = [...dsdItems, ...opsItems];
 
   const isActive = (href: string) => {
     if (href === '/') return pathname === '/';
@@ -93,7 +103,9 @@ export default function Layout({ children }: LayoutProps) {
         {menuOpen && (
           <div className="md:hidden border-t bg-white">
             <nav className="px-4 py-3 space-y-1">
-              {navItems.map((item) => (
+              {/* DSD Section */}
+              <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-4 pt-2 pb-1">DSD Management</div>
+              {dsdItems.map((item) => (
                 <Link
                   key={item.href}
                   href={item.href}
@@ -113,6 +125,24 @@ export default function Layout({ children }: LayoutProps) {
                   )}
                 </Link>
               ))}
+              
+              {/* Operations Section */}
+              <div className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-4 pt-4 pb-1 border-t mt-2">Operations</div>
+              {opsItems.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  onClick={() => setMenuOpen(false)}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-xl text-base font-medium transition-all ${
+                    isActive(item.href)
+                      ? 'bg-red-50 text-red-700'
+                      : 'text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  <span className="text-xl">{item.icon}</span>
+                  {item.label}
+                </Link>
+              ))}
             </nav>
           </div>
         )}
@@ -124,18 +154,27 @@ export default function Layout({ children }: LayoutProps) {
       {/* Mobile Bottom Navigation */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t shadow-lg z-50">
         <div className="flex justify-around items-center h-16 px-2">
-          {navItems.slice(0, 4).map((item) => (
+          {[
+            { href: '/', label: 'Home', icon: '🏠' },
+            { href: '/receiving', label: 'Receiving', icon: '📦' },
+            { href: '/dsd/receiving', label: 'Invoices', icon: '🧾' },
+            { href: '/returned-checks', label: 'Checks', icon: '🔄' },
+          ].map((item) => (
             <Link
               key={item.href}
               href={item.href}
               className={`flex flex-col items-center justify-center flex-1 py-2 ${
-                isActive(item.href) ? 'text-green-600' : 'text-gray-500'
+                isActive(item.href) 
+                  ? item.href === '/returned-checks' ? 'text-red-600' : 'text-green-600' 
+                  : 'text-gray-500'
               }`}
             >
               <span className="text-xl mb-1">{item.icon}</span>
               <span className="text-xs font-medium">{item.label}</span>
               {isActive(item.href) && (
-                <div className="absolute bottom-0 w-12 h-1 bg-green-500 rounded-t-full"></div>
+                <div className={`absolute bottom-0 w-12 h-1 rounded-t-full ${
+                  item.href === '/returned-checks' ? 'bg-red-500' : 'bg-green-500'
+                }`}></div>
               )}
             </Link>
           ))}
